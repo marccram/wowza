@@ -10,4 +10,5 @@
 Protocol.lua
 Format.lua
 Transport.lua
+Chat.lua
 Core.lua

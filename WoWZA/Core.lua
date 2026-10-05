@@ -15,7 +15,7 @@ local MIN_W, MIN_H, MAX_W, MAX_H = 380, 280, 1400, 1100
 local DEFAULT_FADE_ALPHA = 0.5 -- opacity while moving (the world map's default fade)
 local FADE_SECONDS = 0.25
 
-local frame, log, input, hint, minimapButton
+local frame, input, hint, minimapButton
 local playerMoving = false
 local SaveLayout, RestoreLayout, UpdateFade -- defined below, used in CreateUI
 local state = "ask"   -- ask: typing | copy: payload selected, waiting for Ctrl+C | wait: waiting for Ctrl+V
@@ -162,12 +162,6 @@ end
 ---------------------------------------------------------------------------
 -- Conversation
 ---------------------------------------------------------------------------
-local STATUS_TEXT = {
-    sent = "|cff999999(waiting for the answer)|r",
-    pending = "|cff999999(WoWZA is thinking)|r",
-    partial = "|cff999999(still writing)|r",
-}
-
 local function History() return WoWZADB.history end
 
 local function FindEntry(id)
@@ -182,28 +176,26 @@ local function AddEntry(entry)
     while #h > MAX_HISTORY do table.remove(h, 1) end
 end
 
+local DIM, RED = { 0.6, 0.6, 0.6 }, { 1, 0.42, 0.42 }
+local EMPTY_TEXT = "Ask about your quests, zone, class, talents, rotation or leveling.\n"
+    .. "Your level, talents, gear, skills, zone and quest log are included automatically."
+
+-- The conversation as chat bubbles (see Chat.lua): your question, then WoWZA's answer.
 local function Render(keepScroll)
-    if not log then return end
-    local offset = keepScroll and log:GetScrollOffset() or 0
-    log:Clear()
-    local h = History()
-    if #h == 0 then
-        log:AddMessage("|cff999999Ask about your quests, zone, class, spec, rotation or leveling. "
-            .. "Your level, talents, gear, skills, zone and quest log are included automatically.|r")
-    end
-    for _, e in ipairs(h) do
-        log:AddMessage("|cff66ccffYou:|r " .. esc(e.q))
+    local items = {}
+    for _, e in ipairs(History()) do
+        items[#items + 1] = { role = "player", text = esc(e.q) }
         if e.status == "error" then
-            log:AddMessage("|cffff6b6b" .. esc(e.a) .. "|r")
+            items[#items + 1] = { role = "wowza", text = esc(e.a), color = RED }
         elseif e.a and e.a ~= "" then
-            log:AddMessage("|cffffd100WoWZA:|r")
-            local r, g, b = unpack(ns.Format.BODY_COLOR)
-            for _, line in ipairs(ns.Format.Lines(e.a)) do log:AddMessage(line, r, g, b) end
+            local body = table.concat(ns.Format.Lines(e.a), "\n")
+            if e.status == "partial" then body = body .. "\n|cff999999(still writing...)|r" end
+            items[#items + 1] = { role = "wowza", text = body }
+        elseif e.status == "sent" or e.status == "pending" then
+            items[#items + 1] = { role = "wowza", text = "WoWZA is thinking...", color = DIM }
         end
-        if STATUS_TEXT[e.status] then log:AddMessage(STATUS_TEXT[e.status]) end
-        log:AddMessage(" ")
     end
-    if offset > 0 then log:SetScrollOffset(offset) else log:ScrollToBottom() end
+    ns.Chat.Render(items, keepScroll)
 end
 
 -- Item data arrives asynchronously; redraw once it's in so icons and quality colors appear.
@@ -445,32 +437,7 @@ local function CreateUI()
         inset:SetPoint("BOTTOMRIGHT", -10, 86)
     end
 
-    log = CreateFrame("ScrollingMessageFrame", nil, inset)
-    log:SetPoint("TOPLEFT", 10, -8)
-    log:SetPoint("BOTTOMRIGHT", -26, 8)
-    log:SetFontObject(ChatFontNormal)
-    log:SetJustifyH("LEFT")
-    log:SetFading(false)
-    log:SetMaxLines(2000)
-    log:SetHyperlinksEnabled(true)
-    log:SetScript("OnHyperlinkEnter", function(self, link)
-        GameTooltip:SetOwner(self, "ANCHOR_CURSOR")
-        if pcall(GameTooltip.SetHyperlink, GameTooltip, link) then GameTooltip:Show() end
-    end)
-    log:SetScript("OnHyperlinkLeave", function() GameTooltip:Hide() end)
-    log:SetScript("OnHyperlinkClick", function(self, link, text, button)
-        SetItemRef(link, text, button, self) -- click: tooltip; shift-click: link into chat
-    end)
-    log:EnableMouseWheel(true)
-    log:SetScript("OnMouseWheel", function(self, delta)
-        if delta > 0 then self:ScrollUp() else self:ScrollDown() end
-    end)
-    pcall(function()
-        local bar = CreateFrame("EventFrame", nil, inset, "MinimalScrollBar")
-        bar:SetPoint("TOPLEFT", log, "TOPRIGHT", 6, 0)
-        bar:SetPoint("BOTTOMLEFT", log, "BOTTOMRIGHT", 6, 0)
-        ScrollUtil.InitScrollingMessageFrameWithScrollBar(log, bar)
-    end)
+    ns.Chat.Create(inset, EMPTY_TEXT)
 
     hint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("BOTTOMLEFT", 18, 64)

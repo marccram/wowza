@@ -32,7 +32,18 @@ MockMethods = {
   AddMessage = function(self, m) table.insert(self.messages, m) end,
   Clear = function(self) self.messages = {} end,
   CreateTexture = function(self) return newObject("Texture") end,
-  CreateFontString = function(self) local o = newObject("FontString"); hintString = o; return o end,
+  CreateFontString = function(self, _, _, template)
+    local o = newObject("FontString")
+    if template == "GameFontHighlightSmall" then hintString = o end  -- the window's hint line
+    return o
+  end,
+  GetStringHeight = function(self)
+    local lines = 1
+    for _ in (self.text or ""):gmatch("\n") do lines = lines + 1 end
+    return lines * 14
+  end,
+  GetUnboundedStringWidth = function(self) return #(self.text or "") * 6 end,
+  GetVerticalScroll = function() return 0 end, GetVerticalScrollRange = function() return 0 end,
   SetSize = function(self, w, h) self.w, self.h = w, h end,
   GetWidth = function(self) return self.w or 140 end, GetHeight = function(self) return self.h or 140 end,
   SetPoint = function(self, p, rel, rp, x, y)
@@ -61,6 +72,8 @@ function CreateFrame(kind, name, parent, template)
 end
 Minimap = newObject("Frame"); UIParent = newObject("Frame"); GameTooltip = newObject("GameTooltip")
 UISpecialFrames = {}; SOUNDKIT = {}; SlashCmdList = {}; tinsert = table.insert
+portraits = {}
+SetPortraitTexture = function(tex, unit) tex.portrait = unit; table.insert(portraits, unit) end
 PlaySound = function() end
 wipe = function(t) for k in pairs(t) do t[k] = nil end return t end
 strtrim = function(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
@@ -185,7 +198,7 @@ def main():
     L.execute(MOCK)
     ns = L.table()
     loader = L.eval('function(src, ns) local f = assert(loadstring(src)); f("WoWZA", ns) end')
-    for f in ("Protocol.lua", "Format.lua", "Transport.lua", "Core.lua"):
+    for f in ("Protocol.lua", "Format.lua", "Transport.lua", "Chat.lua", "Core.lua"):
         loader((ROOT / "WoWZA" / f).read_text(encoding="utf-8"), ns)
     g = L.globals()
 
@@ -197,8 +210,10 @@ def main():
 
     g.SlashCmdList["WOWZA"]("")
     assert g.WoWZAFrame.shown is True and g.WoWZADB.open is True
-    box, log = g.WoWZAInput, None
-    log = next(f for f in L.eval("frames").values() if f.kind == "ScrollingMessageFrame")
+    box = g.WoWZAInput
+
+    def bubbles():
+        return [(i.role, i.text) for i in ns.Chat["items"].values()]
 
     # 1. Type + Enter: payload placed in the box and highlighted
     box.text = "What should I do next?"
@@ -220,6 +235,7 @@ def main():
     box.scripts.OnKeyDown(box, "C")
     assert box.text == "" and len(g.WoWZADB.history) == 1
     print("Ctrl+C -> committed, status:", g.WoWZADB.history[1].status)
+    assert bubbles() == [("player", "What should I do next?"), ("wowza", "WoWZA is thinking...")], bubbles()
 
     def paste(text):
         box.text = text
@@ -235,9 +251,12 @@ def main():
         paste(bridge.answer_payload(q["id"], status, text, q["q"]))
         e = g.WoWZADB.history[1]
         assert e.status == status and e.a == text and box.text == "", (status, e.status, e.a)
-    msgs = list(log.messages.values())
-    print("log after done:", msgs)
-    assert any("Use \"Rend\" || Overpower" in m for m in msgs), "pipe should be escaped for display"
+    shown = bubbles()
+    print("bubbles after done:", shown)
+    assert [r for r, _ in shown] == ["player", "wowza"], "question bubble, then answer bubble"
+    assert shown[0][1] == "What should I do next?"
+    assert "Use \"Rend\" || Overpower" in shown[1][1], "pipe should be escaped for display"
+    assert "player" in list(g.portraits.values()), "player bubble uses the player's portrait"
 
     # 5. Answer to a question asked from the PC app creates a new entry
     paste(bridge.answer_payload("pc-99", "done", "From the PC", "PC question"))
@@ -396,6 +415,8 @@ def main():
     bridge.write_slots(wow, [{"id": q4["id"], "status": "error", "q": q4["q"], "a": "Error: rate limited"}])
     tick(first_poll + 0.5)
     assert e4.status == "error" and e4.a == "Error: rate limited"
+    err = [i for i in ns.Chat["items"].values() if i.text == "Error: rate limited"][0]
+    assert err.role == "wowza" and err.color[1] == 1, "errors show in red in a WoWZA bubble"
     print("no signals -> polling delivered (error answers too)")
 
     # 15b. No signals and no companion: the first poll shows it never arrived; then the companion
