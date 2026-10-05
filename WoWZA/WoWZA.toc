@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: WoWZA
+## Notes: World of Warcraft Zone Advisor. Ask an AI about your zone, quests, class, spec and leveling. Needs the companion app.
+## Author: marccram
+## Version: 0.2.0
+## IconTexture: Interface\AddOns\WoWZA\icon
+## AddonCompartmentFunc: WoWZA_OnAddonCompartmentClick
+## SavedVariables: WoWZADB
+
+Protocol.lua
+Format.lua
+Transport.lua
+Core.lua

@@ -1,0 +1,5 @@
+<Bindings>
+    <Binding name="WOWZA_TOGGLE" header="WOWZA" category="ADDONS">
+        WoWZA_Toggle()
+    </Binding>
+</Bindings>
