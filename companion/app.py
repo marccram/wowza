@@ -14,7 +14,7 @@ from bridge import (SYSTEM_PROMPT, History, addon_dir, addon_installed, answer_p
 import questdata
 import shortcuts
 from providers import ProviderError, provider_label, stream_answer
-from settings import (FIELD_LABELS, PROVIDERS, clone, is_wow_dir, load_settings, migrate_app_dir,
+from settings import (FIELD_LABELS, PROVIDERS, app_icon_path, clone, is_wow_dir, load_settings, migrate_app_dir,
                       pick_wow_dir, save_settings)
 
 CLIPBOARD_POLL_MS = 250
@@ -40,6 +40,10 @@ class App:
 
         self.root = tk.Tk()
         self.root.title("WoWZA")
+        try:
+            self.root.iconbitmap(default=str(app_icon_path()))  # also used by the Settings window
+        except tk.TclError:
+            pass
         self.root.geometry("440x560")
         self.root.minsize(320, 300)
         self._build_ui()

@@ -3,6 +3,8 @@
 Set-Location $PSScriptRoot
 python -m pip install -r requirements.txt pyinstaller
 python -m PyInstaller --noconfirm --onefile --windowed --name WoWZA `
+    --icon wowza.ico `
+    --add-data "wowza.ico;." `
     --add-data "..\WoWZA;WoWZA" `
     --collect-all lupa `
     app.py

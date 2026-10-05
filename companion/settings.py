@@ -101,6 +101,12 @@ def migrate_app_dir():
         shutil.move(str(OLD_APP_DIR), str(APP_DIR))
 
 
+def app_icon_path():
+    """The companion's window/exe icon (next to app.py, or at the root of a PyInstaller exe)."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return base / "wowza.ico"
+
+
 def addon_source_dir():
     """The bundled WoWZA addon folder (works from source and from a PyInstaller exe)."""
     base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent))

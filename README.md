@@ -84,7 +84,9 @@ restart WoW. A key binding set for the old name needs setting again.
 - `tools/test_questdata.py` checks the QuestieDB lookup against known Forever facts (needs the data downloaded).
 - `companion/questdata.py`: downloads QuestieDB, builds `%APPDATA%\WoWZA\questiedb\index.pickle`, matches names
   in questions and writes the game-data block Claude receives.
-- `tools/make_icon.py` regenerates `icon.tga`.
-- `companion\build.ps1` builds a single `WoWZA.exe` with the addon bundled, for sharing.
+- `companion\build.ps1` builds a single `WoWZA.exe` (about 21 MB) with the addon and icon bundled, for sharing:
+  friends need only that file, not Python. It's unsigned, so Windows SmartScreen may say "Windows protected
+  your PC": click **More info → Run anyway**.
+- `tools/make_icon.py` regenerates the addon icon (`WoWZA/icon.tga`) and the app icon (`companion/wowza.ico`).
 - `## Interface: 16001` in the `.toc` matches client 1.60.1. If WoW says the addon is out of date, run
   `/dump (select(4, GetBuildInfo()))` in game and use that number.
