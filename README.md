@@ -22,10 +22,13 @@ leveling in a chat window inside WoW, and get answers that know your character a
 WoWZA has two parts: the **addon** (the window in WoW) and the **companion app** (runs on your PC and talks
 to the AI, since WoW addons can't use the network). Windows only.
 
+WoWZA is an unofficial fan project. It isn't affiliated with or endorsed by Blizzard Entertainment,
+Anthropic, Google or any other AI provider. World of Warcraft is a trademark of Blizzard Entertainment.
+
 ## Install
 
-1. Run **WoWZA.exe** (friends: that one file is all you need; see [Sharing](#sharing)).
-   Settings opens on first run.
+1. Download **WoWZA.exe** from the [latest release](https://github.com/marccram/wowza/releases/latest) and
+   run it. That one file is all you need. Settings opens on first run.
 2. Check the **WoW game folder** (it's auto-detected, e.g. `...\World of Warcraft\_classic_beta_`) and click
    **Install / update addon**.
 3. Accept the one-time **quest data** download (about 7 MB from QuestieDB's GitHub). You can also do it later
@@ -125,10 +128,10 @@ Nothing secret is in this repository or in WoWZA.exe, so both are safe to share.
 
 ## Sharing
 
-Build the single-file app with `companion\build.ps1`: it creates `companion\dist\WoWZA.exe` (about 21 MB)
-with the addon and icon inside. Friends need only that file, not Python. Send it directly (the exe isn't
-committed to this repository). Each person signs in to their own AI provider and downloads the quest data
-on their own PC; QuestieDB publishes no license file, so its data isn't bundled.
+Point friends to the [Releases page](https://github.com/marccram/wowza/releases/latest): they need only
+WoWZA.exe, not Python. To build it yourself, run `companion\build.ps1`: it creates `companion\dist\WoWZA.exe`
+(about 21 MB) with the addon and icon inside. Each person signs in to their own AI provider and downloads
+the quest data on their own PC; QuestieDB publishes no license file, so its data isn't bundled.
 
 ## Upgrading from Claude Advisor
 
@@ -173,3 +176,7 @@ a new file needs a full WoW restart.
   the quest, NPC, item, object and drop data.
 - [Gethe/wow-ui-source](https://github.com/Gethe/wow-ui-source) (`forever` branch) for checking the game's
   API.
+
+## License
+
+[MIT](LICENSE). Quest data is downloaded from QuestieDB on your own PC and stays under its own terms.
