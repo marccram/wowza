@@ -40,9 +40,14 @@ def _find_claude():
     for p in (Path.home() / ".local" / "bin" / "claude.exe", appdata / "npm" / "claude.cmd"):
         if p.exists():
             return str(p)
-    # Copy bundled with the Claude desktop app (Code tab); keeps itself updated, so take the newest.
-    bundled = sorted((appdata / "Claude" / "claude-code").glob("*/*/claude.exe"),
-                     key=lambda p: p.stat().st_mtime, reverse=True)
+    # Copy bundled with the Claude desktop app (Code tab); it keeps itself updated, so take the newest.
+    # The Store-installed app is packaged: Windows redirects its %APPDATA% files into its package
+    # folder, and only processes started from inside the app see them at the normal path.
+    candidates = list((appdata / "Claude" / "claude-code").glob("*/*/claude.exe"))
+    packages = Path(os.environ.get("LOCALAPPDATA", "")) / "Packages"
+    for pkg in packages.glob("Claude_*"):
+        candidates += (pkg / "LocalCache" / "Roaming" / "Claude" / "claude-code").glob("*/*/claude.exe")
+    bundled = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)
     if bundled:
         return str(bundled[0])
     raise ProviderError("Claude Code isn't installed. Open Settings for setup steps.")
