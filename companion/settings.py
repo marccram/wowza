@@ -76,6 +76,20 @@ PROVIDERS = {
             "3. Keep Ollama running while you play."
         ),
     },
+    "lmstudio": {
+        "label": "Local model (LM Studio, free and private)",
+        "fields": ["base_url", "model"],
+        "defaults": {"base_url": "http://localhost:1234/v1", "model": "google/gemma-4-e4b"},
+        "models": ["google/gemma-4-e4b", "qwen/qwen3.5-9b"],
+        "url": "https://lmstudio.ai",
+        "instructions": (
+            "Runs entirely on your PC. Free and private, but knows less about WoW than the cloud options.\n\n"
+            "1. Install LM Studio (button below) and download a model.\n"
+            "2. In LM Studio open the Developer tab and start the local server.\n"
+            "3. Pick the model above, or type its name exactly as LM Studio lists it.\n"
+            "4. Keep LM Studio running while you play."
+        ),
+    },
     "openai_compat": {
         "label": "Other provider (OpenAI-compatible)",
         "fields": ["base_url", "api_key", "model"],
@@ -87,7 +101,9 @@ PROVIDERS = {
             "1. Create an account and API key with that service.\n"
             "2. Enter its server URL (for example https://openrouter.ai/api/v1 or "
             "https://api.groq.com/openai/v1), your key, and a model name from its model list.\n\n"
-            "Local servers such as LM Studio usually need no key."
+            "Local servers such as LM Studio usually need no key. For LM Studio, start its local "
+            "server (Developer tab), use http://localhost:1234/v1 as the URL, and the model's "
+            "name as shown there (for example qwen/qwen3.5-9b)."
         ),
     },
 }
@@ -121,7 +137,7 @@ def is_wow_dir(path):
 
 
 def find_wow_dirs():
-    """Look for installed WoW game folders (e.g. ...\\World of Warcraft\\_classic_beta_)."""
+    """Look for installed WoW game folders (e.g. ...\\World of Warcraft\\_forever_)."""
     found = []
     for drive in string.ascii_uppercase[2:8]:
         for root in (r"World of Warcraft", r"Program Files (x86)\World of Warcraft",
@@ -133,7 +149,7 @@ def find_wow_dirs():
 
 
 def pick_wow_dir(candidates):
-    for pref in ("forever", "_classic_beta_"):
+    for pref in ("_forever_", "forever", "_classic_beta_"):
         for d in candidates:
             if pref in d.name.lower():
                 return d

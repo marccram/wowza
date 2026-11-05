@@ -29,7 +29,7 @@ Anthropic, Google or any other AI provider. World of Warcraft is a trademark of 
 
 1. Download **WoWZA.exe** from the [latest release](https://github.com/marccram/wowza/releases/latest) and
    run it. That one file is all you need. Settings opens on first run.
-2. Check the **WoW game folder** (it's auto-detected, e.g. `...\World of Warcraft\_classic_beta_`) and click
+2. Check the **WoW game folder** (it's auto-detected, e.g. `...\World of Warcraft\_forever_`) and click
    **Install / update addon**.
 3. Accept the one-time **quest data** download (about 7 MB from QuestieDB's GitHub). You can also do it later
    in Settings.
@@ -41,6 +41,7 @@ Anthropic, Google or any other AI provider. World of Warcraft is a trademark of 
    | Claude API | About 1-3¢ per question | An Anthropic API key with credit |
    | Google Gemini | Free, with daily limits | A free Google AI Studio key (free-tier prompts may be used by Google) |
    | Local (Ollama) | Free, private | A decent GPU; less WoW knowledge than the cloud options |
+   | Local (LM Studio) | Free, private | Same as Ollama; start LM Studio's local server first |
    | Other (OpenAI-compatible) | Varies | OpenRouter, Groq, LM Studio, etc. |
 
 5. **Fully restart WoW** (a `/reload` isn't enough the first time: the game only finds new addon files when
@@ -159,7 +160,7 @@ python app.py
 | `WoWZA/Protocol.lua` | Clipboard message format |
 | `companion/app.py` | Companion window, settings, clipboard watcher |
 | `companion/bridge.py` | Addon install and migration, slot files, the AI's instructions |
-| `companion/providers.py` | Claude (subscription and API), Gemini, Ollama, OpenAI-compatible |
+| `companion/providers.py` | Claude (subscription and API), Gemini, Ollama, LM Studio, OpenAI-compatible |
 | `companion/questdata.py` | QuestieDB download, index and question lookups |
 | `tools/test_addon.py` | Runs the addon against a mock WoW API, end to end (needs `lupa`) |
 | `tools/test_questdata.py` | Checks quest-data lookups against known Forever facts (needs the data) |

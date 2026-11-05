@@ -47,6 +47,10 @@ def _find_claude():
     packages = Path(os.environ.get("LOCALAPPDATA", "")) / "Packages"
     for pkg in packages.glob("Claude_*"):
         candidates += (pkg / "LocalCache" / "Roaming" / "Claude" / "claude-code").glob("*/*/claude.exe")
+    # Newer builds of the app keep it outside the package, in %LOCALAPPDATA%\Claude-Data\<package id>\.
+    local = Path(os.environ.get("LOCALAPPDATA", ""))
+    for data in local.glob("Claude-Data/*/claude-code"):
+        candidates += data.glob("*/*/claude.exe")
     bundled = sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True)
     if bundled:
         return str(bundled[0])
@@ -262,7 +266,17 @@ def _openai_compat(cfg, system, messages):
                 yield text
 
 
+def _lmstudio(cfg, system, messages):
+    try:
+        yield from _openai_compat(cfg, system, messages)
+    except ProviderError as e:
+        if "Couldn't connect" in str(e):
+            raise ProviderError("LM Studio's server isn't running. Start it in the Developer tab and try again.")
+        raise
+
+
 _STREAMERS = {
+    "lmstudio": _lmstudio,
     "claude_sub": _claude_sub,
     "claude_api": _claude_api,
     "gemini": _gemini,
