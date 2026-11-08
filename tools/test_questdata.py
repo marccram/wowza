@@ -47,6 +47,15 @@ def main():
     assert "Gryphon Master" in flight.split("\n")[1], flight
     wool = qd.facts_for("where can i buy wool cloth", sw)
     assert "a common drop from" in wool
+    # recipes: the question names the dish, the answer is the recipe item and its vendors
+    recipe = qd.facts_for("who sells the longjaw mud snapper cooking recipe", sw)
+    assert "[[item:Recipe: Longjaw Mud Snapper]]" in recipe and "[[npc:Khara Deepwater]]" in recipe, recipe
+    assert "drops from" not in recipe, "the fish's drop sources aren't the answer"
+    assert "[[item:Pattern: Runecloth Bag]]" in qd.facts_for("where do i get the pattern for runecloth bag", sw)
+    # "learn" phrasings and rank-titled crafting trainers
+    assert "Cooking Trainers" in qd.facts_for("where do i learn to cook", sw)
+    ench = qd.facts_for("where can i learn enchanting", sw)
+    assert ench.startswith("Enchanting Trainers") and "Enchanter>" in ench.split("\n")[1], ench
     print("quest data checks passed")
 
 

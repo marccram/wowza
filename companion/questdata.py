@@ -56,6 +56,20 @@ TITLE_ALIASES = {
 }
 
 
+RECIPE_NAME = re.compile(r"^(?:Recipe|Pattern|Plans|Formula|Schematic|Manual|Design|Book): (.+)$")
+RECIPE_WORDS = re.compile(r"\b(?:recipes?|patterns?|plans|formulas?|formulae|schematics?|manuals?|designs?)\b")
+# "learn to cook" -> the Cooking Trainer
+LEARN_VERBS = {"cook": "cooking", "fish": "fishing", "mine": "mining", "skin": "skinning",
+               "bandage": "first aid", "smith": "blacksmithing", "forge": "blacksmithing"}
+
+
+# Crafting trainers are titled by rank ("Journeyman Enchanter"), not "Enchanting Trainer".
+for _prof, _noun in (("enchanting", "enchanter"), ("tailoring", "tailor"), ("alchemy", "alchemist"),
+                     ("engineering", "engineer"), ("blacksmithing", "blacksmith"),
+                     ("leatherworking", "leatherworker")):
+    TITLE_ALIASES[f"{_prof} trainer"] = [f"{r} {_noun}" for r in ("apprentice", "journeyman", "expert", "artisan", "master")]
+
+
 def _norm(s):
     return " ".join(re.sub(r"[^a-z0-9 ]", " ", s.lower().replace("'", "").replace("’", "")).split())
 
@@ -226,6 +240,13 @@ class QuestData:
                 if isinstance(e.get("name"), str):
                     names.setdefault(_norm(e["name"]), []).append((kind, eid))
         self.names = names
+        # "Recipe: Longjaw Mud Snapper" -> {"longjaw mud snapper": [item ids]}: for "who sells the X recipe".
+        recipe_of = {}
+        for iid, it in self.db["items"].items():
+            m = isinstance(it.get("name"), str) and RECIPE_NAME.match(it["name"])
+            if m:
+                recipe_of.setdefault(_norm(m.group(1)), []).append(iid)
+        self.recipe_of = recipe_of
         titles = {}  # NPC titles like "First Aid Trainer", "Flight Master", "Innkeeper"
         for nid, n in self.db["npcs"].items():
             if isinstance(n.get("sub"), str) and n["spawns"]:
@@ -387,10 +408,12 @@ class QuestData:
         if cls:
             q = re.sub(r"\b(my )?class trainer\b", f"{cls} trainer", q)
         found = []
-        for m in re.finditer(r"\btrain(?:ing)? (?:my |in |up )?([a-z]+)(?: ([a-z]+))?", q):  # "train first aid"
+        # "train first aid", "learn enchanting", "learn to cook"
+        for m in re.finditer(r"\b(?:train(?:ing)?|learn(?:ing)?) (?:to |my |in |up )?([a-z]+)(?: ([a-z]+))?", q):
             a, b = m.group(1), m.group(2)
+            a = LEARN_VERBS.get(a, a)
             for cand in ([f"{a} {b} trainer"] if b else []) + [f"{a} trainer"]:
-                if cand in self.titles:
+                if cand in self.titles or cand in TITLE_ALIASES:
                     found.append(cand)
                     q = q.replace(m.group(0), " ")
                     break
@@ -482,6 +505,7 @@ class QuestData:
         for t in titles[:2]:
             title_lines += self.describe_title(t, here, (ctx or {}).get("faction"))
         picked = []
+        asks_recipe = bool(RECIPE_WORDS.search(_norm(question)))
         for hits in self.mentions(question):
             kinds = {}
             for kind, eid in hits:
@@ -497,6 +521,9 @@ class QuestData:
                     ids = sorted(ids, key=lambda i: -len(sum(self.db["npcs"][i]["spawns"].values(), [])))[:2]
                 else:
                     ids = ids[:1]
+                    if kind == "items" and asks_recipe:  # the dish -> the recipe item that teaches it
+                        base = _norm(self.db["items"][ids[0]]["name"])
+                        ids = self.recipe_of.get(base, [])[:1] or ids
                 picked += [(kind, i) for i in ids]
                 break
         if not picked and not title_lines:
