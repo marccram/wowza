@@ -42,6 +42,38 @@ local function SetState(s, msg)
 end
 
 ---------------------------------------------------------------------------
+-- Talents on clients that use the talent-tree (Traits) system instead of classic talent tabs:
+-- every talent with points spent, as { talent = name, rank = n, max = n }.
+---------------------------------------------------------------------------
+function ns.TraitTalents()
+    if not (C_ClassTalents and C_ClassTalents.GetActiveConfigID and C_Traits and C_Traits.GetConfigInfo) then
+        return nil, "no Traits API"
+    end
+    local configID = C_ClassTalents.GetActiveConfigID()
+    if not configID then return nil, "no active talent config" end
+    local cfg = C_Traits.GetConfigInfo(configID)
+    if type(cfg) ~= "table" or type(cfg.treeIDs) ~= "table" then return nil, "no trees in config" end
+    local out, points = {}, 0
+    for _, treeID in ipairs(cfg.treeIDs) do
+        for _, nodeID in ipairs(C_Traits.GetTreeNodes(treeID) or {}) do
+            local node = C_Traits.GetNodeInfo(configID, nodeID)
+            local rank = type(node) == "table" and node.currentRank or 0
+            if rank > 0 then
+                local entryID = (node.activeEntry and node.activeEntry.entryID) or (node.entryIDs and node.entryIDs[1])
+                local entry = entryID and C_Traits.GetEntryInfo(configID, entryID)
+                local def = entry and entry.definitionID and C_Traits.GetDefinitionInfo(entry.definitionID)
+                local spellID = def and (def.overriddenSpellID or def.spellID)
+                local name = spellID and ((C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(spellID))
+                    or (GetSpellInfo and (GetSpellInfo(spellID))))
+                out[#out + 1] = { talent = name or ("talent " .. tostring(nodeID)), rank = rank, max = node.maxRanks }
+                points = points + rank
+            end
+        end
+    end
+    return out, points, #cfg.treeIDs
+end
+
+---------------------------------------------------------------------------
 -- Character context sent with each question
 ---------------------------------------------------------------------------
 local function BuildContext()
@@ -65,6 +97,10 @@ local function BuildContext()
     -- Forever is vanilla content: classic talent trees, not modern specs. Points per tree tell the build.
     ctx.talents = safe(function()
         local out = {}
+        if not GetNumTalentTabs then -- Forever: the talent-tree (Traits) system
+            local t = ns.TraitTalents()
+            return t and #t > 0 and t or nil
+        end
         for i = 1, GetNumTalentTabs() do
             local a, b, c, _, e = GetTalentTabInfo(i)
             local name, points = a, c -- classic: name, icon, pointsSpent
@@ -84,16 +120,17 @@ local function BuildContext()
     end)
 
     ctx.skills = safe(function()
-        local wanted = {
-            [TRADE_SKILLS or "Professions"] = true,
-            [SECONDARY_SKILLS or "Secondary Skills"] = true,
-            [WEAPON_SKILLS or "Weapon Skills"] = true,
-        }
+        -- Match headers by their displayed name: Forever's SECONDARY_SKILLS global doesn't equal
+        -- the "Secondary Skills" header text, which silently dropped Cooking, First Aid and Fishing.
+        local function wanted(h)
+            h = type(h) == "string" and h:lower() or ""
+            return h:find("profession", 1, true) or h:find("secondary", 1, true) or h:find("weapon", 1, true)
+        end
         local out, header, seen = {}, nil, {}
         local function add(name, isHeader, rank, maxRank)
             if isHeader then
                 header = name
-            elseif header and wanted[header] and not seen[name] and type(rank) == "number" then
+            elseif header and wanted(header) and not seen[name] and type(rank) == "number" then
                 seen[name] = true
                 out[#out + 1] = string.format("%s %d/%d", name, rank, maxRank or 0)
             end
@@ -634,6 +671,41 @@ SlashCmdList["WOWZA"] = function(msg)
         end
         print(string.format("|cffffd100WoWZA:|r opacity while moving is %d%%. "
             .. "Use /za fade 10-100 (100 = no fade).", WoWZADB.fadeAlpha * 100))
+    elseif msg:lower() == "context" then
+        -- Debug: what the companion is sent, plus every raw skill line the game reports.
+        local c = BuildContext()
+        local function say(s) print("|cffffd100WoWZA:|r " .. s) end
+        say(string.format("level %s %s, gold %s, zone %s, %d quests, gear %d, talents %s",
+            tostring(c.level), tostring(c.class), tostring(c.gold), tostring(c.zone),
+            c.quests and #c.quests or 0, c.gear and #c.gear or 0, c.talents and "yes" or "NO"))
+        say("skills sent: " .. (c.skills and table.concat(c.skills, ", ") or "NONE"))
+        local tok, t, info, trees = pcall(ns.TraitTalents)
+        if not tok then
+            say("traits talents error: " .. tostring(t))
+        elseif not t then
+            say("traits talents: none (" .. tostring(info) .. ")")
+        else
+            local parts = {}
+            for _, x in ipairs(t) do parts[#parts + 1] = string.format("%s %s/%s", x.talent, x.rank, tostring(x.max)) end
+            say(string.format("traits talents: %d talents, %s points, %s trees: %s", #t, tostring(info),
+                tostring(trees), table.concat(parts, ", ")))
+        end
+        say("raw skill lines (H = header, p = parentSkillLineID):")
+        if C_SkillInfo and C_SkillInfo.GetNumSkillLines then
+            for i = 1, C_SkillInfo.GetNumSkillLines() do
+                local sk = C_SkillInfo.GetSkillLineInfo(i)
+                if type(sk) == "table" then
+                    say(string.format("  %s%s rank=%s/%s p=%s", sk.isHeader and "H " or "", tostring(sk.name),
+                        tostring(sk.rank), tostring(sk.maxRank), tostring(sk.parentSkillLineID)))
+                end
+            end
+        elseif GetNumSkillLines then
+            for i = 1, GetNumSkillLines() do
+                local name, isHeader, _, rank, _, _, maxRank = GetSkillLineInfo(i)
+                say(string.format("  %s%s rank=%s/%s", isHeader and "H " or "", tostring(name),
+                    tostring(rank), tostring(maxRank)))
+            end
+        end
     elseif msg:lower() == "reset" then
         WoWZADB.layout = nil
         RestoreLayout()
