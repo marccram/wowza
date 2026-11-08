@@ -56,6 +56,17 @@ def main():
     assert "Cooking Trainers" in qd.facts_for("where do i learn to cook", sw)
     ench = qd.facts_for("where can i learn enchanting", sw)
     assert ench.startswith("Enchanting Trainers") and "Enchanter>" in ench.split("\n")[1], ench
+    # instance entrances (Forever coordinates), nearest first, faction-aware battlegrounds
+    if qd.db.get("dungeons"):
+        dm = qd.facts_for("where is the deadmines", sw)
+        assert "entrance [[zone:Westfall]] at 42.5, 71.7" in dm, dm
+        inf = {"zone": "Ironforge", "position": "39.4, 41.2", "level": 16, "faction": "Alliance"}
+        tram = qd.facts_for("how do i get to stormwind, the tram?", inf)
+        assert "[[zone:Ironforge]] at 84.1, 53.1; [[zone:Stormwind City]] at 71.98, 27.61" in tram, tram
+        wsg = qd.facts_for("where is warsong gulch", inf)
+        assert "[[zone:Ashenvale]]" in wsg and "Barrens" not in wsg, wsg
+        horde = qd.facts_for("where is warsong gulch", {**inf, "faction": "Horde"})
+        assert "[[zone:The Barrens]]" in horde, horde
     print("quest data checks passed")
 
 

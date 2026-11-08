@@ -17,7 +17,7 @@ from settings import APP_DIR
 
 DATA_DIR = APP_DIR / "questiedb"
 INDEX_FILE = DATA_DIR / "index.pickle"
-INDEX_VERSION = 1
+INDEX_VERSION = 2
 SOURCE = "https://raw.githubusercontent.com/Questie/QuestieDB/master/"
 FILES = {
     "foreverQuestDB.lua": "data/Forever/foreverQuestDB.lua",
@@ -27,6 +27,9 @@ FILES = {
     "classicItemDrops.lua": "support/Forever/DropTables/classicItemDrops.lua",
     "zones.lua": "src/corrections/enum/zones.lua",
 }
+# Small extra file (instance entrances). Added after the first release, so it is fetched on demand
+# rather than being part of what counts as "downloaded".
+OPTIONAL_FILES = {"dungeons.lua": "support/Forever/Zones/dungeons.lua"}
 DOWNLOAD_MB = 6.9
 
 MAX_ENTITIES = 6    # entities named in a question that we describe
@@ -56,6 +59,10 @@ TITLE_ALIASES = {
 }
 
 
+DUNGEON_ALIASES = {"tram": "deeprun tram", "ragefire": "ragefire chasm", "brd": "blackrock depths",
+                   "ubrs": "blackrock spire", "lbrs": "blackrock spire", "sfk": "shadowfang keep",
+                   "bfd": "blackfathom deeps", "rfc": "ragefire chasm", "rfk": "razorfen kraul",
+                   "rfd": "razorfen downs", "zf": "zul farrak", "wc": "wailing caverns"}
 RECIPE_NAME = re.compile(r"^(?:Recipe|Pattern|Plans|Formula|Schematic|Manual|Design|Book): (.+)$")
 RECIPE_WORDS = re.compile(r"\b(?:recipes?|patterns?|plans|formulas?|formulae|schematics?|manuals?|designs?)\b")
 # "learn to cook" -> the Cooking Trainer
@@ -88,15 +95,65 @@ def downloaded():
 
 def download(progress=None):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    for i, (name, path) in enumerate(FILES.items(), 1):
+    every = {**FILES, **OPTIONAL_FILES}
+    for i, (name, path) in enumerate(every.items(), 1):
         if progress:
-            progress(f"Downloading {name} ({i}/{len(FILES)})")
-        with urlopen(SOURCE + path, timeout=60) as resp:
-            data = resp.read()
-        tmp = DATA_DIR / (name + ".tmp")
-        tmp.write_bytes(data)
-        tmp.replace(DATA_DIR / name)
+            progress(f"Downloading {name} ({i}/{len(every)})")
+        _fetch(name, path)
     INDEX_FILE.unlink(missing_ok=True)
+
+
+def _fetch(name, path):
+    with urlopen(SOURCE + path, timeout=60) as resp:
+        data = resp.read()
+    tmp = DATA_DIR / (name + ".tmp")
+    tmp.write_bytes(data)
+    tmp.replace(DATA_DIR / name)
+
+
+def _ensure_optional():
+    """Fetch any missing small extras; offline or a moved file just means those lookups are absent."""
+    for name, path in OPTIONAL_FILES.items():
+        if not (DATA_DIR / name).exists():
+            try:
+                _fetch(name, path)
+            except Exception:
+                pass
+
+
+def _dungeon_entrances():
+    """{normalized name: {"name", "zone", "ent": {"A": [(zone, x, y)], "H": [...]}}} from Questie's dungeons.lua.
+
+    The file's base table is Forever's own coordinates; the Expansions blocks below it only apply to
+    later clients (Expansions.Current is Era here). Battleground entrances depend on faction, so it runs
+    once per faction."""
+    path = DATA_DIR / "dungeons.lua"
+    if not path.exists():
+        return {}
+    from lupa.lua51 import LuaRuntime
+    src = path.read_text(encoding="utf-8")
+    out = {}
+    for side, faction in (("A", "Alliance"), ("H", "Horde")):
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        lua.execute(f"""
+            UnitFactionGroup = function() return "{faction}" end
+            local mods = {{ ZoneDB = {{ private = {{}} }},
+                           Expansions = {{ Era = 1, Tbc = 2, Wotlk = 3, Cata = 4, MoP = 5, Current = 1 }} }}
+            QuestieLoader = {{ ImportModule = function(_, name) return mods[name] end }}
+            Mods = mods
+        """)
+        lua.execute(src)
+        for _, entry in _py(lua.eval("Mods.ZoneDB.private.dungeons")).items():
+            name, parent, spots = _field(entry, 1), _field(entry, 3), _field(entry, 4)  # field 2 is often nil
+            if not isinstance(name, str) or not spots:
+                continue
+            rec = out.setdefault(_norm(name), {"name": name, "zone": parent, "ent": {"A": [], "H": []}})
+            for s in (spots.values() if isinstance(spots, dict) else spots):
+                if isinstance(s, list) and len(s) >= 3:
+                    spot = (int(s[0]), float(s[1]), float(s[2]))
+                    if spot not in rec["ent"][side]:
+                        rec["ent"][side].append(spot)
+    return out
 
 
 def _lua_tables():
@@ -199,7 +256,8 @@ def build_index():
     drops = {int(i): {int(n): float(p) for n, p in _py(d).items()} for i, d in raw["drops"].items()}
     zones = {int(v): _title(k) for k, v in _py(raw["zones"]).items() if isinstance(v, (int, float))}
     index = {"version": INDEX_VERSION, "built": time.time(), "quests": quests, "npcs": npcs,
-             "objects": objects, "items": items, "drops": drops, "zones": zones}
+             "objects": objects, "items": items, "drops": drops, "zones": zones,
+             "dungeons": _dungeon_entrances()}
     with open(INDEX_FILE, "wb") as f:
         pickle.dump(index, f, protocol=pickle.HIGHEST_PROTOCOL)
     return index
@@ -220,11 +278,14 @@ class QuestData:
             if self.ready or not downloaded():
                 return self.ready
             try:
+                _ensure_optional()
                 db = None
                 if INDEX_FILE.exists():
                     with open(INDEX_FILE, "rb") as f:
                         db = pickle.load(f)
-                    if db.get("version") != INDEX_VERSION:
+                    # Rebuild on a format change, or once the optional files have arrived.
+                    if db.get("version") != INDEX_VERSION or (
+                            not db.get("dungeons") and (DATA_DIR / "dungeons.lua").exists()):
                         db = None
                 self.db = db or build_index()
                 self._index_names()
@@ -247,6 +308,17 @@ class QuestData:
             if m:
                 recipe_of.setdefault(_norm(m.group(1)), []).append(iid)
         self.recipe_of = recipe_of
+        # Instance names as players type them: "the deadmines" / "deadmines", "tram" for the Deeprun Tram.
+        # Kept apart from `names`, because instance names are also zone names and would be skipped there.
+        dungeon_names = {}
+        for key in self.db.get("dungeons") or {}:
+            for variant in {key, key.removeprefix("the ")}:
+                if len(variant) >= 5 and variant not in COMMON:
+                    dungeon_names[variant] = key
+        for alias, key in DUNGEON_ALIASES.items():
+            if key in (self.db.get("dungeons") or {}):
+                dungeon_names[alias] = key
+        self.dungeon_names = dungeon_names
         titles = {}  # NPC titles like "First Aid Trainer", "Flight Master", "Innkeeper"
         for nid, n in self.db["npcs"].items():
             if isinstance(n.get("sub"), str) and n["spawns"]:
@@ -454,6 +526,35 @@ class QuestData:
             lines.append(f"  - and {len(ids) - 4} more elsewhere")
         return lines
 
+    # -- instance entrances ("where is the deadmines", "how do i get to stormwind from ironforge") --
+
+    def dungeon_mentions(self, text):
+        q = f" {_norm(text)} "
+        found = []
+        for variant in sorted(self.dungeon_names, key=len, reverse=True):  # longest first: "dire maul" before "maul"
+            if f" {variant} " in q or f" {variant}s " in q:
+                key = self.dungeon_names[variant]
+                if key not in found:
+                    found.append(key)
+                q = q.replace(f" {variant} ", "  ")
+        return found
+
+    def describe_dungeon(self, key, here, faction):
+        rec = self.db["dungeons"][key]
+        side = "H" if (faction or "").lower() == "horde" else "A"
+        spots = rec["ent"][side] or rec["ent"]["A"] or rec["ent"]["H"]
+
+        def rank(s):
+            zid, x, y = s
+            if here.get("zone") == zid and here.get("pos"):
+                return (0, math.hypot(x - here["pos"][0], y - here["pos"][1]))
+            return (1, 0)
+        spots = sorted(spots, key=rank)
+        where = "; ".join(f"[[zone:{self.zone_name(z)}]] at {x:g}, {y:g}" for z, x, y in spots[:4])
+        label = "entrance" if len(spots) == 1 else "entrances"
+        return [f"Instance [[zone:{rec['name']}]]: {label} {where}"
+                + ("; the first is nearest the player" if len(spots) > 1 and rank(spots[0])[0] == 0 else "")]
+
     # -- question matching --
 
     def mentions(self, text):
@@ -504,6 +605,8 @@ class QuestData:
         title_lines = []
         for t in titles[:2]:
             title_lines += self.describe_title(t, here, (ctx or {}).get("faction"))
+        for key in self.dungeon_mentions(question)[:2]:
+            title_lines += self.describe_dungeon(key, here, (ctx or {}).get("faction"))
         picked = []
         asks_recipe = bool(RECIPE_WORDS.search(_norm(question)))
         for hits in self.mentions(question):
